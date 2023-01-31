@@ -1,9 +1,13 @@
 from fastapi import APIRouter, HTTPException, requests, Response
-from src.models.user import User, UserIn
+from src.models.user import User, UserIn, Phone, Signup, Login, Email, Forgot
 from bson import ObjectId
 from datetime import datetime
 from src.schemas.user import userEntity, usersEntity
 import csv
+from twilio.rest import Client
+from sendgrid import SendGridAPIClient 
+from sendgrid.helpers.mail import Mail
+import random
 import json
 from pymongo import MongoClient
 conn = MongoClient()
@@ -55,14 +59,15 @@ async def get_only_one_user(phone : int):
 
 '''ADDING user records by making user's phone number and email unique'''
 
+
 @app1.post('/user')
 async def add_user(user : User):
     phone_number = conn.local.user.find_one({"phone" : user.phone})
     email_id = conn.local.user.find_one({"email" : user.email})
     if not phone_number: 
         if not email_id :
-            conn.local.user.insert_one(dict(user))
-            return {"message" : "data_added_successfully"}
+                conn.local.user.insert_one(dict(user))
+                return {"message" : "data_added_successfully"}
         else:
             raise HTTPException(status_code=404, detail="email_already_exist!")
     else:
@@ -183,7 +188,7 @@ async def create_single_user_csv(phone : int):
 
 
             '''Selected fields will displayed in csv files'''
-            
+
             # csv_writer = csv.writer(f)
             # csv_writer.writerow(["_id", "username", "email"])
             # csv_writer.writerow([str(user["_id"]), user["username"], user["email"]])
@@ -201,11 +206,14 @@ async def create_single_user_csv(phone : int):
 
 
 
+
+
 '''DICT-READER'''
+
 
 @app1.get('/dictreader')
 async def see(file : str):
-    csv_file = "csvfiles/{}.csv".format(file)
+    csv_file = f"csvfiles/{file}.csv"
     try: 
         with open(csv_file, "r") as f:
             
@@ -218,3 +226,141 @@ async def see(file : str):
     except :
         raise HTTPException(status_code=404, detail="file_doesn't_exist!")
    
+
+
+
+
+
+'''Sign-up route'''
+
+
+
+'''Sending OTP to phone number'''
+
+@app1.post('/verify_phone') 
+async def otp(phone : Phone):
+    phone_number = conn.local.user.find_one({"phone" : phone.phone})
+    if not phone_number :
+        otp = random.randrange(000000,999999)
+        account_sid = "ACba3ab41cd32568b368e387dca973c30d"
+        auth_token = "ca36ffdc79bf68868d094cded7419ff1"
+        client = Client(account_sid, auth_token)
+        message = client.messages.create(
+                        body="Hello! Your otp for registration is - " + str(otp),
+                        from_="+16086022741",
+                        to ='+91' + str(phone.phone)
+                    )
+        data = {"phone": phone.phone,"otp": otp}
+        conn.local.otp.insert_one(dict(data))
+        return {"message" : f"OTP_sent_to_{phone.phone}"}
+    raise HTTPException(status_code=404, detail = "user_alredy_regitered!")
+
+
+'''Registering User details by verifying recieved OTP on user's phone number'''
+
+@app1.post('/signup')
+async def signup(user : Signup):
+    phone_number = conn.local.user.find_one({"phone" : user.phone})
+    email_id = conn.local.user.find_one({"email" : user.email})
+    if not phone_number: 
+        if not email_id :
+            phone_otp = conn.local.otp.find_one({"phone" : user.phone})
+            if phone_otp : 
+                otp = phone_otp.get("otp")
+
+
+                '''OTP_vrefication'''
+                
+                if user.otp == otp :               
+                    data = {"username": user.username, "email" : user.email, "phone": user.phone, "password" : user.password}
+                    conn.local.user.insert_one(dict(data))
+                    return {"message" : "OTP_verified!","success": "user_regitered_successfully"}
+                
+                raise HTTPException(status_code=404, detail="invalid_OTP!")
+
+
+
+            else : 
+                raise HTTPException(status_code=404, detail="not_recieved_OTP")
+        else:
+            raise HTTPException(status_code=404, detail="email_already_exist!")
+    else:
+        raise HTTPException(status_code=404, detail="phone_already_exist!")
+
+
+
+
+
+'''LOGIN route'''
+
+
+@app1.post('/login')
+async def login(details : Login):
+    email_id = conn.local.user.find_one({"email" : details.email})
+    if email_id :
+        pwd = email_id.get("password")
+        if details.password == pwd :
+            return {"message" : "you_are_logged_in_successfully"}
+       
+        return {"message" : "invalid_password!"}
+     
+    raise HTTPException(status_code=404, detail="email_doesn't_exist!")
+
+
+
+
+
+'''Forgot Password Route'''
+
+
+
+'''Sending OTP to user Email ID'''
+
+@app1.post('/verify_mail')
+async def otp(email : Email):
+    email_id = conn.local.user.find_one({"email" : email.email})
+
+    '''email_verification'''
+
+    if email_id : 
+        # email = email_id.get("email")
+        otp = random.randrange(000000,999999)
+        sg = SendGridAPIClient("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")
+        message = Mail(
+                        from_email="kartik.lavkush@unthinkable.co",
+                        to_emails= email.email,
+                        subject='OTP Verification Code ',
+                        html_content = "Your OTP for reset password - " + str(otp)
+                        )
+        sg.send(message)
+        data = {"email": email.email,"otp": otp}
+        conn.local.otp.insert_one(dict(data))
+        return {"message" : f"OTP_sent_to_{email.email}"}
+
+    raise HTTPException(status_code=404, detail="email_doesn't_exist!")
+
+
+'''Updating password by verifying recieved OTP on email ID'''
+
+@app1.put('/forgot_password')
+async def forgot_password(details : Forgot):
+    user = conn.local.user.find_one({"email" : details.email})
+    if user:
+        email_otp = conn.local.otp.find_one({"email" : details.email}) 
+        if email_otp : 
+            otp = email_otp.get("otp")
+
+            '''OTP_vrefication'''
+
+            if details.otp == otp :
+                data = {"password" : details.password}
+                conn.local.user.find_one_and_update({"email" : details.email},{"$set" : dict(data)})
+                return {"message" : "OTP_verified!", "success" : "data_updated_successfully"}
+
+            raise HTTPException(status_code=404, detail="invalid_OTP")
+        
+        
+        
+        raise HTTPException(status_code=404, detail="not_recieved_OTP")
+    else:
+        raise HTTPException(status_code=404, detail="record_doesn't_exist!")
