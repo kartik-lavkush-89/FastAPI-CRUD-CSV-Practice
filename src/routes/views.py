@@ -1,18 +1,25 @@
-from fastapi import APIRouter, HTTPException, requests, Response
+from fastapi import APIRouter, HTTPException, Response, Header
+from starlette.responses import JSONResponse
 from src.models.user import User, UserIn, Phone, Signup, Login, Email, Forgot
 from bson import ObjectId
-from datetime import datetime
+import datetime
 from src.schemas.user import userEntity, usersEntity
 import csv
 from twilio.rest import Client
 from sendgrid import SendGridAPIClient 
 from sendgrid.helpers.mail import Mail
 import random
+import jwt
+import bcrypt
 import json
 from pymongo import MongoClient
 conn = MongoClient()
 
 app1 = APIRouter()
+
+
+secret_key = 'thisissecret'
+
 
 
 """ROUTES"""
@@ -28,8 +35,8 @@ app1 = APIRouter()
 
 @app1.get('/users')
 async def get_all_users():
-    print (conn.local.user.find())
-    return usersEntity(conn.local.user.find())
+    a = conn.local.user.find()
+    return usersEntity(a)
     
 
 '''GETTING single user record by OBJECT ID'''
@@ -167,7 +174,7 @@ async def delete_user(phone : int):
 async def generate_csv():
     users = list(conn.local.user.find())
     csv_file = "csvfiles/all_users.csv"
-    with open(csv_file, "w", newline="") as f:
+    with open(csv_file, "w") as f:
 
         csv_writer = csv.writer(f)
         csv_writer.writerow(["_id", "username", "email", "phone", "password"])
@@ -184,7 +191,7 @@ async def create_single_user_csv(phone : int):
     user = conn.local.user.find_one({"phone" : phone})
     if user :
         csv_file = "csvfiles/single_user.csv"                                    
-        with open(csv_file, "w", ) as f:
+        with open(csv_file, "w") as f:
 
 
             '''Selected fields will displayed in csv files'''
@@ -271,8 +278,9 @@ async def signup(user : Signup):
 
                 '''OTP_vrefication'''
                 
-                if user.otp == otp :               
-                    data = {"username": user.username, "email" : user.email, "phone": user.phone, "password" : user.password}
+                if user.otp == otp :     
+                    hashed_password = bcrypt.hashpw(user.password.encode(), bcrypt.gensalt())          
+                    data = {"username": user.username, "email" : user.email, "phone": user.phone, "password" : hashed_password}
                     conn.local.user.insert_one(dict(data))
                     return {"message" : "OTP_verified!","success": "user_regitered_successfully"}
                 
@@ -299,10 +307,14 @@ async def login(details : Login):
     email_id = conn.local.user.find_one({"email" : details.email})
     if email_id :
         pwd = email_id.get("password")
-        if details.password == pwd :
-            return {"message" : "you_are_logged_in_successfully"}
+
+        if bcrypt.checkpw(details.password.encode(), pwd) :
+            payload = {"user_id": details.email, "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=30)}
+            token = jwt.encode(payload, secret_key, 'HS256')
+            return {"message" : "you_are_logged_in_successfully", "token" : token }
        
-        return {"message" : "invalid_password!"}
+        
+        raise HTTPException(status_code=404, detail="wrong_password!")
      
     raise HTTPException(status_code=404, detail="email_doesn't_exist!")
 
@@ -353,7 +365,8 @@ async def forgot_password(details : Forgot):
             '''OTP_vrefication'''
 
             if details.otp == otp :
-                data = {"password" : details.password}
+                hashed_password = bcrypt.hashpw(details.password.encode(), bcrypt.gensalt()) 
+                data = {"password" : hashed_password}
                 conn.local.user.find_one_and_update({"email" : details.email},{"$set" : dict(data)})
                 return {"message" : "OTP_verified!", "success" : "data_updated_successfully"}
 

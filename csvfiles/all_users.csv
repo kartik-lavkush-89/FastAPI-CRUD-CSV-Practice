@@ -1,2 +1,3 @@
-_id,username,email,phone,password
-63d3c33d5e03ecf073c20f1a,kartik,kartik@gmail.com,8923933990,1234
+_id,username,email,phone,password
+63d8f8bc03238d8f89c6e701,Shivani Bhatt,shivani.bhatt@unthinkable.co,9457057793,b'$2b$12$W1HMHbz84nSg8mkFekNf4OpQMqxiagbGT3/6tadyc30voacpuDIWe'
+63da3cd905db7e702aae1f78,Kartik Lavkush,kartik.lavkush@unthinkable.co,8923933990,b'$2b$12$dh32DgB9ZaL/bFp8Es5W1OTbavvUGfgWbIi6dirEfnB4opkBReL7e'
