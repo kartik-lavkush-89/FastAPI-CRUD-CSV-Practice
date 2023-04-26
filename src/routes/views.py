@@ -257,7 +257,7 @@ async def otp(phone : Phone):
         client = Client(account_sid, auth_token)
         message = client.messages.create(
                         body="Hello! Your otp for registration is - " + str(otp),
-                        from_="+16086022741",
+                        from_="your TWILIO number +1.....",
                         to ='+91' + str(phone.phone)
                     )
         data = {"phone": phone.phone,"otp": otp}
@@ -342,7 +342,7 @@ async def otp(email : Email):
         otp = random.randrange(000000,999999)
         sg = SendGridAPIClient(os.getenv("SG_API_KEY))
         message = Mail(
-                        from_email="kartik.lavkush@unthinkable.co",
+                        from_email="youremail@gmail.com",
                         to_emails= email.email,
                         subject='OTP Verification Code ',
                         html_content = "Your OTP for reset password - " + str(otp)
