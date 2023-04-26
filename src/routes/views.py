@@ -11,14 +11,17 @@ from sendgrid.helpers.mail import Mail
 import random
 import jwt
 import bcrypt
+import os
+from dotenv import load_dotenv
 import json
 from pymongo import MongoClient
 conn = MongoClient()
 
 app1 = APIRouter()
 
+load_dotenv()
 
-secret_key = 'thisissecret'
+secret_key = os.getenv("SECRET_KEY")
 
 
 
@@ -249,8 +252,8 @@ async def otp(phone : Phone):
     phone_number = conn.local.user.find_one({"phone" : phone.phone})
     if not phone_number :
         otp = random.randrange(000000,999999)
-        account_sid = "ACba3ab41cd32568b368e387dca973c30d"
-        auth_token = "ca36ffdc79bf68868d094cded7419ff1"
+        account_sid = os.getenv("ACCOUNT_SID")
+        auth_token = os.getenv("AUTH_TOKEN")
         client = Client(account_sid, auth_token)
         message = client.messages.create(
                         body="Hello! Your otp for registration is - " + str(otp),
@@ -337,7 +340,7 @@ async def otp(email : Email):
     if email_id : 
         # email = email_id.get("email")
         otp = random.randrange(000000,999999)
-        sg = SendGridAPIClient("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")
+        sg = SendGridAPIClient(os.getenv("SG_API_KEY))
         message = Mail(
                         from_email="kartik.lavkush@unthinkable.co",
                         to_emails= email.email,
